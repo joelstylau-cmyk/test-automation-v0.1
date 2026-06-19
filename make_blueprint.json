@@ -1,0 +1,170 @@
+{
+  "name": "Impressum Scraper - E-Mail Personalisierung",
+  "flow": [
+    {
+      "id": 1,
+      "module": "google-sheets:watchRows",
+      "version": 2,
+      "parameters": {},
+      "mapper": {
+        "spreadsheetId": "DEINE_SPREADSHEET_ID",
+        "sheetId": "DEIN_SHEET_NAME",
+        "includeHeaders": "FirstRowIsHeaders",
+        "limit": 1
+      },
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "rename": "1. Neue E-Mail aus Google Sheet"
+      }
+    },
+    {
+      "id": 2,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "mapper": null,
+      "metadata": {
+        "designer": { "x": 300, "y": 0 }
+      },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 3,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {},
+              "mapper": {
+                "url": "https://www.{{replace(split(1.email; \"@\"; 2); \" \"; \"\")}}",
+                "method": "GET",
+                "headers": [
+                  {
+                    "name": "User-Agent",
+                    "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                  },
+                  {
+                    "name": "Accept-Language",
+                    "value": "de-DE,de;q=0.9"
+                  }
+                ],
+                "followRedirect": true,
+                "followAllRedirects": true,
+                "shareCookies": false
+              },
+              "metadata": {
+                "designer": { "x": 600, "y": 0 },
+                "rename": "2. Website aufrufen (Homepage)"
+              }
+            },
+            {
+              "id": 4,
+              "module": "builtin:TextParser:Match",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "pattern": "(?i)href=[\"']([^\"']*(?:impressum|imprint|legal-notice)[^\"']*)[\"']",
+                "text": "{{3.data}}",
+                "global": false
+              },
+              "metadata": {
+                "designer": { "x": 900, "y": 0 },
+                "rename": "3. Impressum-Link finden"
+              }
+            },
+            {
+              "id": 5,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {},
+              "mapper": {
+                "url": "{{if(contains(4.`1`; \"http\"); 4.`1`; \"https://www.\" + replace(split(1.email; \"@\"; 2); \" \"; \"\") + 4.`1`)}}",
+                "method": "GET",
+                "headers": [
+                  {
+                    "name": "User-Agent",
+                    "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                  },
+                  {
+                    "name": "Accept-Language",
+                    "value": "de-DE,de;q=0.9"
+                  }
+                ],
+                "followRedirect": true,
+                "followAllRedirects": true,
+                "shareCookies": false
+              },
+              "metadata": {
+                "designer": { "x": 1200, "y": 0 },
+                "rename": "4. Impressum-Seite laden"
+              }
+            },
+            {
+              "id": 6,
+              "module": "builtin:TextParser:Match",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "pattern": "(?:Geschäftsführ(?:er|ung|erin)|Vertreten\\s+durch|CEO|Managing\\s+Director|Inhaber(?:in)?)\\s*:?\\s*([A-ZÄÖÜ][a-zäöüß]+\\s+[A-ZÄÖÜ][a-zäöüß]+(?:\\s+[A-ZÄÖÜ][a-zäöüß]+)?)",
+                "text": "{{5.data}}",
+                "global": false
+              },
+              "metadata": {
+                "designer": { "x": 1500, "y": 0 },
+                "rename": "5. Geschäftsführer extrahieren"
+              }
+            },
+            {
+              "id": 7,
+              "module": "builtin:BasicFeeder",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "name": "{{6.`1`}}",
+                "vorname": "{{first(split(6.`1`; \" \"))}}",
+                "nachname": "{{last(split(6.`1`; \" \"))}}",
+                "firma": "{{capitalize(first(split(replace(split(1.email; \"@\"; 2); \" \"; \"\"); \".\")))}}"
+              },
+              "metadata": {
+                "designer": { "x": 1800, "y": 0 },
+                "rename": "6. Variablen aufbereiten"
+              }
+            },
+            {
+              "id": 8,
+              "module": "google-sheets:updateRow",
+              "version": 2,
+              "parameters": {},
+              "mapper": {
+                "spreadsheetId": "DEINE_SPREADSHEET_ID",
+                "sheetId": "DEIN_SHEET_NAME",
+                "rowNumber": "{{1.__ROW_NUMBER__}}",
+                "values": {
+                  "geschaeftsfuehrer": "{{7.name}}",
+                  "status": "gefunden"
+                }
+              },
+              "metadata": {
+                "designer": { "x": 2100, "y": -150 },
+                "rename": "7a. Sheet aktualisieren"
+              }
+            },
+            {
+              "id": 9,
+              "module": "gmail:ActionSendEmail",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "to": "{{1.email}}",
+                "subject": "Zusammenarbeit mit {{7.firma}}",
+                "htmlContent": "<p>Sehr geehrte/r {{7.nachname}},</p><p>ich hoffe, diese Nachricht erreicht Sie wohlauf.</p><p>Mein Name ist [IHR NAME] und ich schreibe Ihnen, weil ich glaube, dass wir für {{7.firma}} einen echten Mehrwert schaffen können.</p><p>[HIER IHREN PITCH EINFÜGEN]</p><p>Ich würde mich freuen, wenn wir in einem kurzen Gespräch die Möglichkeiten einer Zusammenarbeit besprechen könnten.</p><p>Mit freundlichen Grüßen<br>[IHR NAME]</p>"
+              },
+              "metadata": {
+                "designer": { "x": 2100, "y": 150 },
+                "rename": "7b. Personalisierte E-Mail senden"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
